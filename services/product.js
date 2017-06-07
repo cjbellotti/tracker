@@ -51,6 +51,35 @@ module.exports = function (models) {
       });
   });
 
+  app.get('/api/product/product-info/:productInfoId/warehouse/:locationId', function(req, res) {
+
+    models.Product.findAll({
+      include : [
+        {
+          model : models.ProductInfo
+        }
+      ],
+      where : {
+        productInfoId : parseInt(req.params.productInfoId),
+        locationId : parseInt(req.params.locationId)
+      }
+    })
+      .then(function (result){
+
+        var list = [];
+        for (var index in result) {
+          list.push(result[index].dataValues);
+        }
+
+        return res.status(200).json(list).end();
+
+      })
+      .catch(function(err) {
+        res.status(500).json({ message : err}).end();
+      });
+
+  });
+
   app.post('/api/product', function (req, res) {
     models.Product.create(req.body)
       .then(function (result) {
