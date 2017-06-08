@@ -54,7 +54,7 @@ app.post('/api/stock_movement/movements', function (req, res) {
     where.push (`P.SERIAL = '${req.body.serial}'`);
   }
 
-  if (req.body.warehouseId && req.body.warehouse > 0) {
+  if (req.body.warehouseId && req.body.warehouseId > 0) {
     where.push (`(SM.SOURCEID = ${req.body.warehouseId} OR SM.TARGETID = ${req.body.warehouseId})`);
   }
 

@@ -49,6 +49,33 @@ module.exports = function (models) {
       });
   });
 
+  app.get('/api/stock/warehouse/:id', function (req, res) {
+
+    models.Stock.findAll({
+      include : [
+        {
+          model : models.Warehouse
+        },
+        {
+          model : models.ProductInfo
+        }
+      ],
+      where : {
+        warehouseId : parseInt(req.params.id)
+      }
+    })
+    .then(function (result) {
+      var list = [];
+      for (var index in result) {
+        list.push(result[index].dataValues);
+      }
+      res.status(200).json(list).end();
+    })
+    .catch(function(err) {
+      return res.status(500).json( { message : err }).end();
+    });
+
+  });
   app.get('/api/stock/product_info/:id', function (req, res) {
 
     models.Stock.findAll({
