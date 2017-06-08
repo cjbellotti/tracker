@@ -5,6 +5,7 @@ module.exports = function (connection) {
 
   var models = {};
 
+  models.conecction = connection;
   models.Warehouse = connection.define('warehouse', {
     id : {
       type : Sequelize.INTEGER,
@@ -45,7 +46,7 @@ module.exports = function (connection) {
       autoIncrement : true
     },
     quantity : {
-      type : Sequelize.INTEGER, 
+      type : Sequelize.INTEGER,
       defaultValue : 1
     }
   });
