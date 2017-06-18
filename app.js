@@ -23,6 +23,11 @@ app.use(function(req, res, next) {
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
   next();
 });
+app.use(function (req, res, next) {
+  console.log(`${req.method} - ${req.url}`);
+  next();
+});
+
 app.use(require('./services')(models));
 
 app.post('/api/stock_movement/movements', function (req, res) {

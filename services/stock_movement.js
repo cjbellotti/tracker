@@ -177,6 +177,98 @@ module.exports = function (models) {
       })
   });
 
+  // app.post('/api/stock_movement/entry', function (req, res) {
+  //
+  //   if (!req.body.productInfoId)
+  //     return res.status(500).json({ message : 'Must specify productInfo Id.'}).end();
+  //
+  //   if (!req.body.targetWarehouseId)
+  //     return res.status(500).json({ message : 'Must specify target warehouse.'}).end();
+  //
+  //   if (!req.body.serial)
+  //     return res.status(500).json({ message : "Must specify product's serial."}).end();
+  //
+  //   const productInfoId = parseInt(req.body.productInfoId);
+  //   const targetWarehouseId = parseInt(req.body.targetWarehouseId);
+  //
+  //   models.ProductInfo.findById(productInfoId)
+  //   .then(function (productInfo) {
+  //
+  //     if (!productInfo)
+  //       return res.status(404).json({ message : 'ProductInfo not found.'}).end();
+  //
+  //     models.Warehouse.findById(targetWarehouseId)
+  //     .then(function (warehouse) {
+  //
+  //       if (!warehouse)
+  //         return res.status(404).json({ message : 'Warehouse not found.'}).end();
+  //
+  //       models.Product.findAll({
+  //         where : {
+  //           serial : req.body.serial
+  //         }
+  //       })
+  //       .then(function (product) {
+  //         if (product.length > 0)
+  //           return res.status(500).json({ message : `A product with serial ${req.body.serial} already exists.`}).end();
+  //
+  //         models.Product.create({
+  //           productInfoId : productInfoId,
+  //           serial : req.body.serial,
+  //           locationId : targetWarehouseId
+  //         })
+  //         .then(function(product) {
+  //
+  //           models.Stock.findOrCreate({
+  //             where : {
+  //               productInfoId : productInfoId,
+  //               warehouseId : targetWarehouseId
+  //             }
+  //           })
+  //           .then(function(stock, created) {
+  //
+  //             stock[0].update({
+  //               quantity : (!stock[1]) ? stock[0].dataValues.quantity + 1 : stock[0].dataValues.quantity
+  //             })
+  //             .then(function (stock) {
+  //               models.StockMovement.create({
+  //                 sourceId : null,
+  //                 targetId : targetWarehouseId,
+  //                 productId : product.dataValues.id
+  //               })
+  //               .then(function(stockMovement) {
+  //                 return res.status(200).json(stockMovement).end();
+  //               })
+  //               .catch(function (err) {
+  //                 return res.status(500).json({ message : err}).end();
+  //               });
+  //             })
+  //             .catch(function (err) {
+  //               return res.status(500).json({ message : err}).end();
+  //             });
+  //           })
+  //           .catch(function(err) {
+  //             return res.status(500).json({ message : err}).end();
+  //           });
+  //         })
+  //         .catch(function(err){
+  //           return res.status(500).json({ message : err}).end();
+  //         });
+  //       })
+  //       .catch(function (err) {
+  //         return res.status(500).json({ message : err}).end();
+  //       });
+  //     })
+  //     .catch(function (err) {
+  //       return res.status(500).json({ message : err}).end();
+  //     });
+  //   })
+  //   .catch(function (err) {
+  //     return res.status(500).json({ message : err }).end();
+  //   });
+  //
+  // });
+
   app.post('/api/stock_movement/entry', function (req, res) {
 
     if (!req.body.productInfoId)
@@ -195,76 +287,59 @@ module.exports = function (models) {
     .then(function (productInfo) {
 
       if (!productInfo)
-        return res.status(404).json({ message : 'ProductInfo not found.'}).end();
+        throw Error('ProductInfo not found.');
 
       models.Warehouse.findById(targetWarehouseId)
       .then(function (warehouse) {
 
         if (!warehouse)
-          return res.status(404).json({ message : 'Warehouse not found.'}).end();
+          throw Error('Warehouse not found.');
 
-        models.Product.findAll({
+        return models.Product.findAll({
           where : {
             serial : req.body.serial
           }
-        })
-        .then(function (product) {
-          if (product.length > 0)
-            return res.status(500).json({ message : `A product with serial ${req.body.serial} already exists.`}).end();
-
-          models.Product.create({
-            productInfoId : productInfoId,
-            serial : req.body.serial,
-            locationId : targetWarehouseId
-          })
-          .then(function(product) {
-
-            models.Stock.findOrCreate({
-              where : {
-                productInfoId : productInfoId,
-                warehouseId : targetWarehouseId
-              }
-            })
-            .then(function(stock, created) {
-
-              stock[0].update({
-                quantity : (!stock[1]) ? stock[0].dataValues.quantity + 1 : stock[0].dataValues.quantity
-              })
-              .then(function (stock) {
-                models.StockMovement.create({
-                  sourceId : null,
-                  targetId : targetWarehouseId,
-                  productId : product.dataValues.id
-                })
-                .then(function(stockMovement) {
-                  return res.status(200).json(stockMovement).end();
-                })
-                .catch(function (err) {
-                  return res.status(500).json({ message : err}).end();
-                });
-              })
-              .catch(function (err) {
-                return res.status(500).json({ message : err}).end();
-              });
-            })
-            .catch(function(err) {
-              return res.status(500).json({ message : err}).end();
-            });
-          })
-          .catch(function(err){
-            return res.status(500).json({ message : err}).end();
-          });
-        })
-        .catch(function (err) {
-          return res.status(500).json({ message : err}).end();
         });
       })
+      .then(function (product) {
+        if (product.length > 0)
+          throw Error(`A product with serial ${req.body.serial} already exists.`);
+
+        return models.Product.create({
+          productInfoId : productInfoId,
+          serial : req.body.serial,
+          locationId : targetWarehouseId
+        })
+      })
+      .then(function (product) {
+        return models.StockMovement.create({
+          sourceId : null,
+          targetId : targetWarehouseId,
+          productId : product.dataValues.id
+        });
+      })
+      .then(function(stockMovement) {
+
+        return models.Stock.findOrCreate({
+            where : {
+              productInfoId : productInfoId,
+              warehouseId : targetWarehouseId
+            }
+        });
+      })
+      .then(function(stock, created) {
+
+        return stock[0].update({
+            quantity : (!stock[1]) ? stock[0].dataValues.quantity + 1 : stock[0].dataValues.quantity
+        });
+      })
+      .then(function(stockMovement) {
+        return res.status(200).json(stockMovement).end();
+      })
       .catch(function (err) {
-        return res.status(500).json({ message : err}).end();
+        return res.status(500).json({ message : err }).end();
       });
-    })
-    .catch(function (err) {
-      return res.status(500).json({ message : err }).end();
+
     });
 
   });
