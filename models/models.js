@@ -35,6 +35,7 @@ module.exports = function (connection) {
       autoIncrement : true
     },
     serial : Sequelize.STRING,
+    hash : Sequelize.STRING
   });
   models.Product.belongsTo(models.ProductInfo);
   models.Product.belongsTo(models.Warehouse, { as : 'location'});
