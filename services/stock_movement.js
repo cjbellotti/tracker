@@ -1,5 +1,6 @@
 'use strict'
 const Express = require('express');
+const ethereum = require('./ethereum');
 
 function getMovementsFromTo(models, from, to, callback) {
 
@@ -168,7 +169,23 @@ module.exports = function (models) {
   });
 
   app.post('/api/stock_movement', function (req, res) {
-    models.StockMovement.create(req.body)
+
+    models.Product.findById(req.body.productId)
+      .then(product => {
+          if (!product.hash)
+            throw Error("The product haven't blockchain hashcode.");
+
+          return ethereum.changeProductWarehouse(product.hash,
+                                                req.body.source,
+                                                req.body.target);
+      })
+      .then(result => {
+          console.log(`blockhcain result: ${result}`);
+          if (!result)
+            throw Error("This operation not compliance the security blockhcain process.");
+
+          return models.StockMovement.create(req.body);
+      })
       .then(function (result) {
         return res.status(200).json(result).end();
       })
@@ -176,98 +193,6 @@ module.exports = function (models) {
         return res.status(500).json({message : err}).end();
       })
   });
-
-  // app.post('/api/stock_movement/entry', function (req, res) {
-  //
-  //   if (!req.body.productInfoId)
-  //     return res.status(500).json({ message : 'Must specify productInfo Id.'}).end();
-  //
-  //   if (!req.body.targetWarehouseId)
-  //     return res.status(500).json({ message : 'Must specify target warehouse.'}).end();
-  //
-  //   if (!req.body.serial)
-  //     return res.status(500).json({ message : "Must specify product's serial."}).end();
-  //
-  //   const productInfoId = parseInt(req.body.productInfoId);
-  //   const targetWarehouseId = parseInt(req.body.targetWarehouseId);
-  //
-  //   models.ProductInfo.findById(productInfoId)
-  //   .then(function (productInfo) {
-  //
-  //     if (!productInfo)
-  //       return res.status(404).json({ message : 'ProductInfo not found.'}).end();
-  //
-  //     models.Warehouse.findById(targetWarehouseId)
-  //     .then(function (warehouse) {
-  //
-  //       if (!warehouse)
-  //         return res.status(404).json({ message : 'Warehouse not found.'}).end();
-  //
-  //       models.Product.findAll({
-  //         where : {
-  //           serial : req.body.serial
-  //         }
-  //       })
-  //       .then(function (product) {
-  //         if (product.length > 0)
-  //           return res.status(500).json({ message : `A product with serial ${req.body.serial} already exists.`}).end();
-  //
-  //         models.Product.create({
-  //           productInfoId : productInfoId,
-  //           serial : req.body.serial,
-  //           locationId : targetWarehouseId
-  //         })
-  //         .then(function(product) {
-  //
-  //           models.Stock.findOrCreate({
-  //             where : {
-  //               productInfoId : productInfoId,
-  //               warehouseId : targetWarehouseId
-  //             }
-  //           })
-  //           .then(function(stock, created) {
-  //
-  //             stock[0].update({
-  //               quantity : (!stock[1]) ? stock[0].dataValues.quantity + 1 : stock[0].dataValues.quantity
-  //             })
-  //             .then(function (stock) {
-  //               models.StockMovement.create({
-  //                 sourceId : null,
-  //                 targetId : targetWarehouseId,
-  //                 productId : product.dataValues.id
-  //               })
-  //               .then(function(stockMovement) {
-  //                 return res.status(200).json(stockMovement).end();
-  //               })
-  //               .catch(function (err) {
-  //                 return res.status(500).json({ message : err}).end();
-  //               });
-  //             })
-  //             .catch(function (err) {
-  //               return res.status(500).json({ message : err}).end();
-  //             });
-  //           })
-  //           .catch(function(err) {
-  //             return res.status(500).json({ message : err}).end();
-  //           });
-  //         })
-  //         .catch(function(err){
-  //           return res.status(500).json({ message : err}).end();
-  //         });
-  //       })
-  //       .catch(function (err) {
-  //         return res.status(500).json({ message : err}).end();
-  //       });
-  //     })
-  //     .catch(function (err) {
-  //       return res.status(500).json({ message : err}).end();
-  //     });
-  //   })
-  //   .catch(function (err) {
-  //     return res.status(500).json({ message : err }).end();
-  //   });
-  //
-  // });
 
   app.post('/api/stock_movement/entry', function (req, res) {
 
@@ -305,11 +230,19 @@ module.exports = function (models) {
         if (product.length > 0)
           throw Error(`A product with serial ${req.body.serial} already exists.`);
 
+        return ethereum.createProductIntance(req.body.serial, targetWarehouseId);
+      })
+      .then(productHash => {
+
+        if (!productHash)
+          throw Error(`Error while registring the product in the blockchain.`);
+
         return models.Product.create({
           productInfoId : productInfoId,
           serial : req.body.serial,
-          locationId : targetWarehouseId
-        })
+          locationId : targetWarehouseId,
+          hash : productHash
+        });
       })
       .then(function (product) {
         return models.StockMovement.create({
@@ -344,6 +277,135 @@ module.exports = function (models) {
 
   });
 
+  // app.post('/api/stock_movement/product/:id/from/:source/to/:target', function (req, res) {
+  //
+  //   if (!req.params.id)
+  //     return res.status(500).json({ message : "Must specify product's id" }).end();
+  //
+  //   if (!req.params.source)
+  //     return res.status(500).json({ message : "Must specify source warehouse."}).end();
+  //
+  //   if (!req.params.target)
+  //     return res.status(500).json({ message : "Must specify target warehouse."}).end();
+  //
+  //   if(req.params.source == req.params.target)
+  //     return res.status(500).json({ message : "Source and taget must are differents."}).end();
+  //
+  //   const productId = parseInt(req.params.id);
+  //   const sourceWarehouseId = parseInt(req.params.source);
+  //   const targetWarehouseId = parseInt(req.params.target);
+  //
+  //   models.Product.findAll({
+  //     where : {
+  //       id : productId,
+  //       locationId : sourceWarehouseId
+  //     }
+  //   })
+  //     .then(function(product){
+  //
+  //       if (!product || product.length == 0)
+  //         return res.status(404).json({ message : 'Product not found or not exists on source warehouse or the source warehouse not exists.'}).end();
+  //
+  //       // Verify source warehouse existence
+  //       models.Warehouse.findById(sourceWarehouseId)
+  //         .then(function (sourceWarehouse) {
+  //
+  //           if (!sourceWarehouse)
+  //             return res.status(404).json({ message : 'Source warehouse not found.'}).end();
+  //
+  //           // Verify target warehouse existence
+  //           models.Warehouse.findById(targetWarehouseId)
+  //             .then(function (targetWarehouse) {
+  //
+  //               if (!targetWarehouse)
+  //                 return res.status(404).json({ message : 'Target warehouse not found.'}).end();
+  //
+  //               // Create stock movement
+  //               models.StockMovement.create({
+  //                 sourceId : sourceWarehouseId,
+  //                 targetId : targetWarehouseId,
+  //                 productId : product[0].dataValues.id
+  //               })
+  //                 .then(function (stockMovement) {
+  //
+  //                   // Update product location
+  //                   product[0].update({
+  //                     locationId : targetWarehouseId
+  //                   })
+  //                     .then(function(product) {
+  //
+  //                       // Find or Create target stock summary
+  //                       models.Stock.findOrCreate({
+  //                         where : {
+  //                           warehouseId: product.dataValues.locationId,
+  //                           productInfoId : product.dataValues.productInfoId
+  //                         }
+  //                       })
+  //                         .then (function (stockTarget) {
+  //
+  //                           // Update target stock summary
+  //                           stockTarget[0].update({
+  //                             quantity : stockTarget[0].dataValues.quantity + 1
+  //                           })
+  //                             .then(function (dummy) {
+  //
+  //                               // Find or Create source stock summary
+  //                               models.Stock.findOrCreate({
+  //                                 where : {
+  //                                   warehouseId: sourceWarehouseId,
+  //                                   productInfoId : product.dataValues.productInfoId
+  //                                 }
+  //                               })
+  //                                 .then (function (stockSource) {
+  //
+  //                                   // Update source stock summary
+  //                                   stockSource[0].update({
+  //                                     quantity : stockSource[0].dataValues.quantity - 1
+  //                                   })
+  //                                     .then(function (stockDummy) {
+  //                                         return res.status(200).json(stockMovement.dataValues).end();
+  //                                     })
+  //                                     .catch(function (err) {
+  //                                       return res.status(500).json({ message : err }).end();
+  //                                     });
+  //                                 })
+  //                                 .catch(function (err) {
+  //                                   return res.status(500).json({ message : err }).end();
+  //                                 });
+  //
+  //                             })
+  //                             .catch(function (err) {
+  //                               return res.status(500).json({ message : err }).end();
+  //                             });
+  //                         })
+  //                         .catch(function (err) {
+  //                           return res.status(500).json({ message : err }).end();
+  //                         });
+  //                     })
+  //                     .catch(function (err) {
+  //                       return res.status(500).json({ message : err }).end();
+  //                     });
+  //                 })
+  //                 .catch(function (err) {
+  //                   return res.status(500).json({ message : err }).end();
+  //                 });
+  //
+  //             })
+  //             .catch(function (err) {
+  //               return res.status(500).json({ message : err }).end();
+  //             });
+  //
+  //         })
+  //         .catch(function(err) {
+  //           return res.status(500).json({ message : err }).end();
+  //         });
+  //
+  //     })
+  //     .catch(function(err) {
+  //       return res.status(500).json({ message : err}).end();
+  //     });
+  // });
+
   app.post('/api/stock_movement/product/:id/from/:source/to/:target', function (req, res) {
 
     if (!req.params.id)
@@ -362,6 +424,11 @@ module.exports = function (models) {
     const sourceWarehouseId = parseInt(req.params.source);
     const targetWarehouseId = parseInt(req.params.target);
 
+    let currentProduct;
+    let currentSourceWarehouse;
+    let currentTargetWarehouse;
+    let currentStockMovement;
+
     models.Product.findAll({
       where : {
         id : productId,
@@ -371,105 +438,94 @@ module.exports = function (models) {
       .then(function(product){
 
         if (!product || product.length == 0)
-          return res.status(404).json({ message : 'Product not found or not exists on source warehouse or the source warehouse not exists.'}).end();
+          throw Error('Product not found or not exists on source warehouse or the source warehouse not exists.');
 
+        currentProduct = product[0];
         // Verify source warehouse existence
-        models.Warehouse.findById(sourceWarehouseId)
-          .then(function (sourceWarehouse) {
-
-            if (!sourceWarehouse)
-              return res.status(404).json({ message : 'Source warehouse not found.'}).end();
-
-            // Verify target warehouse existence
-            models.Warehouse.findById(targetWarehouseId)
-              .then(function (targetWarehouse) {
-
-                if (!targetWarehouse)
-                  return res.status(404).json({ message : 'Target warehouse not found.'}).end();
-
-                // Create stock movement
-                models.StockMovement.create({
-                  sourceId : sourceWarehouseId,
-                  targetId : targetWarehouseId,
-                  productId : product[0].dataValues.id
-                })
-                  .then(function (stockMovement) {
-
-                    // Update product location
-                    product[0].update({
-                      locationId : targetWarehouseId
-                    })
-                      .then(function(product) {
-
-                        // Find or Create target stock summary
-                        models.Stock.findOrCreate({
-                          where : {
-                            warehouseId: product.dataValues.locationId,
-                            productInfoId : product.dataValues.productInfoId
-                          }
-                        })
-                          .then (function (stockTarget) {
-
-                            // Update target stock summary
-                            stockTarget[0].update({
-                              quantity : stockTarget[0].dataValues.quantity + 1
-                            })
-                              .then(function (dummy) {
-
-                                // Find or Create source stock summary
-                                models.Stock.findOrCreate({
-                                  where : {
-                                    warehouseId: sourceWarehouseId,
-                                    productInfoId : product.dataValues.productInfoId
-                                  }
-                                })
-                                  .then (function (stockSource) {
-
-                                    // Update source stock summary
-                                    stockSource[0].update({
-                                      quantity : stockSource[0].dataValues.quantity - 1
-                                    })
-                                      .then(function (stockDummy) {
-                                          return res.status(200).json(stockMovement.dataValues).end();
-                                      })
-                                      .catch(function (err) {
-                                        return res.status(500).json({ message : err }).end();
-                                      });
-                                  })
-                                  .catch(function (err) {
-                                    return res.status(500).json({ message : err }).end();
-                                  });
-
-                              })
-                              .catch(function (err) {
-                                return res.status(500).json({ message : err }).end();
-                              });
-                          })
-                          .catch(function (err) {
-                            return res.status(500).json({ message : err }).end();
-                          });
-                      })
-                      .catch(function (err) {
-                        return res.status(500).json({ message : err }).end();
-                      });
-                  })
-                  .catch(function (err) {
-                    return res.status(500).json({ message : err }).end();
-                  });
-
-              })
-              .catch(function (err) {
-                return res.status(500).json({ message : err }).end();
-              });
-
-          })
-          .catch(function(err) {
-            return res.status(500).json({ message : err }).end();
-          });
-
+        return models.Warehouse.findById(sourceWarehouseId);
       })
-      .catch(function(err) {
-        return res.status(500).json({ message : err}).end();
+      .then(function (sourceWarehouse) {
+
+        if (!sourceWarehouse)
+          throw Error('Source warehouse not found.');
+
+        currentSourceWarehouse = sourceWarehouse;
+        // Verify target warehouse existence
+        return models.Warehouse.findById(targetWarehouseId);
+      })
+      .then(function (targetWarehouse) {
+
+        if (!targetWarehouse)
+          throw Error('Target warehouse not found.');
+
+        currentTargetWarehouse = targetWarehouse;
+
+        return ethereum.changeProductWarehouse(
+            currentProduct.dataValues.hash,
+            sourceWarehouseId,
+            targetWarehouseId
+        );
+      })
+      .then(function(result) {
+
+        if (!result)
+          throw Error("This operation not compliance the security blockhcain process.");
+
+        // Create stock movement
+        return models.StockMovement.create({
+            sourceId : sourceWarehouseId,
+            targetId : targetWarehouseId,
+            productId : currentProduct.dataValues.id
+        });
+      })
+      .then(function (stockMovement) {
+
+        currentStockMovement = stockMovement;
+        // Update product location
+        return currentProduct.update({
+          locationId : targetWarehouseId
+        });
+      })
+      .then(function(product) {
+
+        // Find or Create target stock summary
+        return models.Stock.findOrCreate({
+          where : {
+              warehouseId: product.dataValues.locationId,
+              productInfoId : product.dataValues.productInfoId
+          }
+        });
+      })
+      .then (function (stockTarget) {
+
+        // Update target stock summary
+        return stockTarget[0].update({
+          quantity : stockTarget[0].dataValues.quantity + 1
+        });
+      })
+      .then(function (dummy) {
+
+        // Find or Create source stock summary
+        return models.Stock.findOrCreate({
+          where : {
+            warehouseId: sourceWarehouseId,
+            productInfoId : currentProduct.dataValues.productInfoId
+          }
+        });
+      })
+      .then (function (stockSource) {
+
+        // Update source stock summary
+        return stockSource[0].update({
+            quantity : stockSource[0].dataValues.quantity - 1
+        });
+      })
+      .then(function (stockDummy) {
+        return res.status(200).json(currentStockMovement.dataValues).end();
+      })
+      .catch(function (err) {
+        console.log(err);
+        return res.status(500).json({ message : err }).end();
       });
   });
 
